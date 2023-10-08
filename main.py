@@ -1,6 +1,5 @@
 import logging
 
-from functools import wraps
 import tkinter as tk
 import backoff
 
@@ -16,24 +15,7 @@ from selenium_stealth import stealth
 
 from webdriver_manager.chrome import ChromeDriverManager, ChromeType
 
-
 logger = logging.getLogger(__name__)
-
-
-def switch_to_metamask(func):
-    @wraps(func)
-    def switch(*args, **kwargs):
-        self = args[0]
-        current_handle = self.driver.current_window_handle
-        self.driver.switch_to.window(self.driver.window_handles[-1])
-
-        res = func(*args, **kwargs)
-
-        self.driver.switch_to.window(current_handle)
-
-        return res
-
-    return switch
 
 
 class Browser:
@@ -95,11 +77,17 @@ class ChromeBrowser(Browser):
 
 
 class Metamask(ChromeBrowser):
-    PWD = "your_pwd"
+    def __init__(self, metamask_password: str):
+        super().__init__()
+        self._password = metamask_password
+
+    @property
+    def password(self):
+        return self._password
 
     @backoff.on_exception(backoff.constant, Exception, interval=1, max_tries=3)
-    @switch_to_metamask
     def _do_create_account(self):
+        self.driver.switch_to.window(self.metamask_handle)
         self.wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//*[@id="onboarding__terms-checkbox"]'))).click()
         self.wait.until(EC.element_to_be_clickable(
@@ -107,9 +95,11 @@ class Metamask(ChromeBrowser):
         self.wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//button[text()="I agree"]'))).click()
         self.wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[2]/form/div[1]/label/input'))).send_keys(self.PWD)
+            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[2]/form/div[1]/label/input'))).send_keys(
+            self.password)
         self.wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[2]/form/div[2]/label/input'))).send_keys(self.PWD)
+            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[2]/form/div[2]/label/input'))).send_keys(
+            self.password)
         self.wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[2]/form/div[3]/label/input'))).click()
         self.wait.until(EC.element_to_be_clickable(
@@ -177,11 +167,14 @@ class Metamask(ChromeBrowser):
         # input secret words
 
         self.wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[4]/div/div[3]/div[2]/input'))).send_keys(word3)
+            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[4]/div/div[3]/div[2]/input'))).send_keys(
+            word3)
         self.wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[4]/div/div[4]/div[2]/input'))).send_keys(word4)
+            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[4]/div/div[4]/div[2]/input'))).send_keys(
+            word4)
         self.wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[4]/div/div[8]/div[2]/input'))).send_keys(word8)
+            (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[4]/div/div[8]/div[2]/input'))).send_keys(
+            word8)
         self.wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//*[@id="app-content"]/div/div[2]/div/div/div/div[5]/button'))).click()
 
@@ -199,9 +192,9 @@ class Metamask(ChromeBrowser):
             pass
 
         popover = (
-                By.XPATH,
-                '//*[@class="popover-bg"]'
-            )
+            By.XPATH,
+            '//*[@class="popover-bg"]'
+        )
         self.wait_slow.until(EC.invisibility_of_element_located(popover))
 
         # get public key
@@ -225,10 +218,9 @@ class Metamask(ChromeBrowser):
         self.wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//*[@id="app-content"]/div/span/div[1]/div/div/div/button[3]'))).click()
         self.wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@id="app-content"]/div/span/div[1]/div/div/div/div[5]/input'))).send_keys(self.PWD)
+            (By.XPATH, '//*[@id="app-content"]/div/span/div[1]/div/div/div/div[5]/input'))).send_keys(self.password)
         self.wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//*[@id="app-content"]/div/span/div[1]/div/div/div/div[7]/button[2]'))).click()
-        #
         private_key = self.wait.until(EC.presence_of_element_located(
             (By.XPATH,
              '//*[@id="app-content"]/div/span/div[1]/div/div/div/div[5]/div')
@@ -249,8 +241,8 @@ class Metamask(ChromeBrowser):
         self._put_in_file(secret, public_key, private_key)
 
 
-def create_account():
-    with Metamask() as metamask:
+def create_account(metamask_password: str):
+    with Metamask(metamask_password) as metamask:
         try:
             metamask.create_account()
             metamask.close()
@@ -283,6 +275,10 @@ def get_qtt() -> int:
     return int(input('Enter the number of wallets to generate: '))
 
 
+def get_password() -> str:
+    return input("Enter your password for Metamask wallets: ")
+
+
 if __name__ == '__main__':
     logging.basicConfig(
         format='[%(asctime)s] [%(levelname)-7s] %(message)s',
@@ -292,6 +288,7 @@ if __name__ == '__main__':
     logging.getLogger('selenium.webdriver.remote.remote_connection').setLevel(logging.INFO)
     logging.getLogger('urllib3').setLevel(logging.INFO)
     steps = get_qtt()
+    password = get_password()
     for _ in range(steps):
-        create_account()
+        create_account(password)
     sorting('new_accounts.txt')
